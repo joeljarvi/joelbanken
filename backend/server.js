@@ -1,71 +1,88 @@
 import express from "express";
 import bodyParser from "body-parser";
 import cors from "cors";
+import mysql from "mysql2/promise";
+
 const app = express();
 const PORT = 4000;
-// Middleware
+
+const pool = mysql.createPool({
+  user: "root",
+  password: "root",
+  host: "mysql",
+  database: "joelbanken",
+  port: 8889,
+});
+
+async function getUser(username) {
+  const sql = "SELECT * FROM users WHERE username = ?";
+  const params = [username];
+  return await query(sql, params);
+}
+
+async function query(sql, params) {
+  const [results] = await pool.execute(sql, params);
+  return results;
+}
+
 app.use(cors());
 app.use(bodyParser.json());
-// Generera engångslösenord
-function generateOTP() {
-  // Generera en sexsiffrig numerisk OTP
-  const otp = Math.floor(100000 + Math.random() * 900000);
-  return otp.toString();
-}
-// Din kod här. Skriv dina arrayer
-const users = [];
-let account = [];
-const session = [];
-// Din kod här. Skriv dina routes:
 
-app.post("/createAccount", (req, res) => {
-  const data = req.body;
-  data.id = 101 + users.length;
-  users.push(data);
-  const newAccount = [];
-  newAccount.userId = 100 + users.length;
-  newAccount.id = users.length;
-  newAccount.amount = 0;
-  account.push(newAccount);
-  console.log("in users array", users);
-  console.log("in account array ", account);
-  res.send("Posts recived");
+app.post("/createAccount", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const sql = "INSERT INTO users (username, password) VALUES (?, ?)";
+    const params = [username, password];
+    const result = await query(sql, params);
+
+    const userId = result.insertId;
+
+    const sql2 = "INSERT INTO accounts (user_id, balance) VALUES (?, ?)";
+    const params2 = [userId, 0];
+    await query(sql2, params2);
+
+    res.json({ message: "User and account created successfully" });
+  } catch (error) {
+    console.error("Error creating user:", error);
+    res.status(500).json({ message: "Error creating user" }); //
+  }
 });
-app.post("/login", (req, res) => {
-  const data = req.body;
-  let loginSuccessful = false;
-  let newSession = {};
-  let usersAccount = {};
-  for (let i = 0; i < users.length; i++) {
-    if (
-      users[i].username == data.username &&
-      users[i].password == data.password
-    ) {
-      const token = generateOTP();
-      newSession = { userId: users[i].id, token: token };
-      session.push(newSession);
-      usersAccount = {
-        userId: account[i].userId,
-        id: account[i].id,
-        amount: account[i].amount,
-        username: users[i].username,
-      };
-      loginSuccessful = true;
-      break;
+
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const result = await getUser(username);
+
+    if (result.length > 0) {
+      const storedPassword = result[0].password;
+
+      if (storedPassword === password) {
+        const userId = result[0].id;
+        const sql = "SELECT * FROM accounts WHERE user_id = ?";
+        const params = [userId];
+        const account = await query(sql, params);
+
+        const userData = {
+          userId: result[0].id,
+          username: result[0].username,
+          balance: account[0].balance,
+        };
+        res.json({ user: userData, message: "Login successful" });
+      } else {
+        res.status(401).json({ message: "Invalid username or password" });
+      }
+    } else {
+      res.status(401).json({ message: "Invalid username or password" });
     }
-  }
-  if (loginSuccessful) {
-    res.json({
-      message: "Login successful",
-      session: newSession,
-      account: usersAccount,
-    });
-    console.log("in session array ", session);
-  } else {
-    res.status(401).send({ message: "Invalid username or password" });
+  } catch (error) {
+    console.error("Error logging in:", error);
+
+    res.status(500).json({ message: "Error logging in" });
   }
 });
-// Starta servern
+
 app.listen(PORT, () => {
-  console.log(`Bankens backend körs på http://localhost:${PORT}`);
+  console.log(`Bankens backend is running on http://localhost:${PORT}`);
 });

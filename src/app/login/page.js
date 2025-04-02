@@ -1,49 +1,42 @@
 "use client";
-import { useState, useEffect, useContext } from "react";
+
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { HandleAccountContext } from "../../../context/accountContext";
+import { useSession } from "../../../context/sessionContext";
 
 export default function LoginPage() {
   const [userName, setUserName] = useState("");
   const [passWord, setPassWord] = useState("");
-  const [session, setSession] = useState({ userId: "", token: null });
-  const router = useRouter(); // Ensure this is used inside a page component
-
-  const { setAccount } = useContext(HandleAccountContext);
-
-  useEffect(() => {
-    console.log(session); // For debugging
-  }, [session]);
+  const { login } = useSession();
+  const router = useRouter();
 
   async function handleLogin() {
-    const login = { username: userName, password: passWord };
+    const loginData = { username: userName, password: passWord };
 
     setPassWord("");
     setUserName("");
 
     try {
-      const response = await fetch("http://localhost:4000/login", {
+      const response = await fetch("51.20.251.254:4000/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(login),
+        body: JSON.stringify(loginData),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message);
+        throw new Error(errorData.message || "Unknown error");
       }
 
       const data = await response.json();
       console.log("Login successful:", data);
 
-      setSession(data);
-      setAccount(data.account);
+      login(data.user);
 
-      // Redirect user to their profile page using the userId from the response
-
-      router.push(`/me/${data.session.userId}`);
+      router.push(`/me/${data.user.userId}`);
     } catch (error) {
-      alert(error.message); // Display error message
+      console.error("Login error:", error);
+      alert(error.message);
     }
   }
 
@@ -52,14 +45,14 @@ export default function LoginPage() {
       <input
         type="text"
         value={userName}
-        placeholder="username"
+        placeholder="Username"
         className="input"
         onChange={(e) => setUserName(e.target.value)}
       />
       <input
         type="password"
         value={passWord}
-        placeholder="password"
+        placeholder="Password"
         className="input"
         onChange={(e) => setPassWord(e.target.value)}
       />
